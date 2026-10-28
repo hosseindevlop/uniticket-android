@@ -17,11 +17,24 @@ jobs:
       - name: Extract project ZIP
         run: |
           ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*.zip" | head -n 1)
+
           if [ -z "$ZIP_FILE" ]; then
-            echo "Project ZIP not found"
+            echo "ERROR: Project ZIP not found"
             exit 1
           fi
-          unzip -o "$ZIP_FILE" -d .
+
+          unzip -o "$ZIP_FILE" -d extracted
+
+          PROJECT_DIR=$(find extracted -type f -name "settings.gradle.kts" -printf '%h\n' | head -n 1)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: settings.gradle.kts not found in ZIP"
+            find extracted -maxdepth 4 -type f
+            exit 1
+          fi
+
+          cp -a "$PROJECT_DIR"/. .
+
           test -f settings.gradle.kts
           test -f app/build.gradle.kts
 
@@ -32,26 +45,32 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK
-        run: |
-          mkdir -p "$ANDROID_HOME"
-          yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses || true
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ''
 
-      - name: Install Android SDK
+      - name: Verify SDK tools
         run: |
-          sdkmanager --sdk_root="$ANDROID_HOME" \
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          which sdkmanager
+          sdkmanager --version
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Install Android SDK
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
       - name: Build APK
-        run: gradle --no-daemon assembleDebug
+        run: |
+          gradle --no-daemon assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
